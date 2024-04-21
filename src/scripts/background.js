@@ -3,7 +3,7 @@ var RELIABLE_CHECKPOINT = "http://www.google.com/",
     DEFAULT_CHECK_INTERVAL = 108E5,
     RESCHEDULE_DELAY = 9E5,
     MINIMUM_CHECK_SPACING = 1E3,
-    BROWSER_ICON = "img/browser_icon.png",
+    BROWSER_ICON = "img/browser_action_19.png",
     EPSILON = 500,
     WATCHDOG_INTERVAL = 9E5,
     WATCHDOG_TOLERANCE = 12E4;
@@ -38,7 +38,7 @@ var RELIABLE_CHECKPOINT = "http://www.google.com/",
                     });
                     c = {
                         type: "basic",
-                        iconUrl: chrome.extension.getURL("img/icon128.png"),
+                        iconUrl: chrome.extension.getURL("img/icon_128.png"),
                         title: title,
                         message: "",
                         buttons: c
@@ -52,7 +52,7 @@ var RELIABLE_CHECKPOINT = "http://www.google.com/",
             }), d || (chrome.notifications.onButtonClicked.addListener(function(b,
                 a) {
                 var c = e[a];
-                window.open("diff.htm#" + btoa(c.url));
+                window.open(c.url);
                 BG.setPageSettings(c.url, {
                     updated: !1
                 }, function() {

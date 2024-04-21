@@ -13,12 +13,68 @@ var SETTINGS = {
   show_full_page_diff: "show_full_page_diff"
 },
 BG = chrome.extension.getBackgroundPage(),
-DB = openDatabase("pages", "1.0", "Monitored Pages", 51380224),
 REGEX_TIMEOUT = 7E3,
 REGEX_WORKER_PATH = "scripts/regex.js",
 REQUEST_TIMEOUT = 1E4,
 MIN_BODY_TAIL_LENGTH = 100,
 DATABASE_STRUCTURE = "CREATE TABLE IF NOT EXISTS pages (   `url` TEXT NOT NULL UNIQUE,   `name` TEXT NOT NULL,   `mode` TEXT NOT NULL DEFAULT 'text',   `regex` TEXT,   `selector` TEXT,   `check_interval` INTEGER,   `html` TEXT NOT NULL DEFAULT '',   `crc` INTEGER NOT NULL DEFAULT 0,   `updated` INTEGER,   `last_check` INTEGER,   `last_changed` INTEGER );";
+
+class SQLiteDatabaseService {
+  promiser;
+
+  constructor() {
+    this.promiser = new Promise((resolve) => {
+      const _promiser = sqlite3Worker1Promiser({
+        onready: () => {
+          resolve(_promiser);
+        },
+      });
+    })
+  }
+
+  getDbId = async () => {
+    const { dbId } = (await this.promiser)('open', {
+      filename: 'file:worker-promiser.sqlite3?vfs=opfs',
+    });
+
+    return dbId
+  }
+
+  executeSql = async (sql, args, callback) => {
+    const dbId = await this.getDbId();
+    const rows = [];
+
+    try {
+      return (await this.promiser)('exec', {
+        bind: args,
+        dbId,
+        returnValue: 'resultRows',
+        rowMode: 'object',
+        sql,
+        callback({ row, columnNames, rowId }) {
+          if (!row) {
+            if (typeof callback === "function") {
+              callback(rows);
+            }
+            return;
+          }
+
+          rows.push(row);
+        }
+      });
+    } catch (error) {
+      if (!(err instanceof Error)) {
+        err = new Error(err.result.message);
+      }
+      console.error(err.name, err.message, sql, args);
+    } finally {
+      (await this.promiser)('close', { dbId });
+    }
+  }
+}
+
+const SQLITE_DB = new SQLiteDatabaseService();
+
 (function() {
 var a = [0, 1996959894, 3993919788, 2567524794, 124634137, 1886057615, 3915621685, 2657392035, 249268274, 2044508324, 3772115230, 2547177864, 162941995, 2125561021, 3887607047, 2428444049, 498536548, 1789927666, 4089016648, 2227061214, 450548861, 1843258603, 4107580753, 2211677639, 325883990, 1684777152, 4251122042, 2321926636, 335633487, 1661365465, 4195302755, 2366115317, 997073096, 1281953886, 3579855332, 2724688242, 1006888145, 1258607687, 3524101629, 2768942443, 901097722, 1119000684, 3686517206, 2898065728, 853044451, 1172266101,
   3705015759, 2882616665, 651767980, 1373503546, 3369554304, 3218104598, 565507253, 1454621731, 3485111705, 3099436303, 671266974, 1594198024, 3322730930, 2970347812, 795835527, 1483230225, 3244367275, 3060149565, 1994146192, 31158534, 2563907772, 4023717930, 1907459465, 112637215, 2680153253, 3904427059, 2013776290, 251722036, 2517215374, 3775830040, 2137656763, 141376813, 2439277719, 3865271297, 1802195444, 476864866, 2238001368, 4066508878, 1812370925, 453092731, 2181625025, 4111451223, 1706088902, 314042704, 2344532202, 4240017532, 1658658271,
@@ -94,33 +150,27 @@ localStorage.removeItem(a)
 }
 
 function initializeStorage(a) {
-executeSql(DATABASE_STRUCTURE, $.noop, a)
+executeSql(DATABASE_STRUCTURE, [], a)
 }
 
 function executeSql(a, b, d, c) {
-var e = "function" === typeof b ? [] : b;
-DB.transaction(function(b) {
-  b.executeSql(a, e, function(a, b) {
-      (d || $.noop)(b)
-  })
-}, $.noop, c || $.noop)
+  SQLITE_DB.executeSql(a, b, d);
 }
 
 function sqlResultToArray(a) {
-for (var b = [], d = 0; d < a.rows.length; d++) b.push(a.rows.item(d));
-return b
+  return a;
 }
 
 function getPage(a, b) {
 b && executeSql("SELECT * FROM pages WHERE url = ?", [a], function(a) {
-  console.assert(1 >= a.rows.length);
-  a.rows.length ? (a = a.rows.item(0), a.check_interval || (a.check_interval = getSetting(SETTINGS.check_interval)), b(a)) : b(null)
+  console.assert(1 >= a.length);
+  a.length ? (a = a[0], a.check_interval || (a.check_interval = getSetting(SETTINGS.check_interval)), b(a)) : b(null)
 })
 }
 
 function getAllPageURLs(a) {
 a && executeSql("SELECT url FROM pages", [], function(b) {
-  for (var d = [], c = 0; c < b.rows.length; c++) d.push(b.rows.item(c).url);
+  for (var d = [], c = 0; c < b.length; c++) d.push(b[c].url);
   a(d)
 })
 }
@@ -141,14 +191,16 @@ function setPageSettings(a, b, d) {
 var c = [],
   e = [],
   f;
-for (f in b) c.push(f + " = ?"), "boolean" == typeof b[f] && (b[f] = new Number(b[f])), e.push(b[f]);
+for (f in b) c.push(f + " = ?"), "boolean" == typeof b[f] && (b[f] = Number(b[f])), e.push(b[f]);
 e.push(a);
-c ? (a = "UPDATE pages SET " + c.join(", ") + " WHERE url = ?", executeSql(a, e, null, d)) : (d || $.noop)()
+c ? (a = "UPDATE pages SET " + c.join(", ") + " WHERE url = ?", executeSql(a, e, d)) : (d || $.noop)()
 }
 
 function addPage(a, b) {
 if (window != BG) return BG.addPage(a, b);
-executeSql("REPLACE INTO pages(url, name, mode, regex, selector,                    check_interval, html, crc, updated,                    last_check, last_changed) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [a.url, a.name || chrome.i18n.getMessage("untitled", a.url), a.mode || "text", a.regex || null, a.selector || null, a.check_interval || null, a.html || "", a.crc || 0, a.updated ? 1 : 0, Date.now(), a.last_changed || null], null, function() {
+executeSql("REPLACE INTO pages(url, name, mode, regex, selector,                    check_interval, html, crc, updated,                    last_check, last_changed) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+[a.url, a.name || chrome.i18n.getMessage("untitled", a.url), a.mode || "text", a.regex || null, a.selector || null, a.check_interval || null, a.html || "", a.crc || 0, a.updated ? 1 : 0, Date.now(), a.last_changed || null]
+, function() {
   BG.takeSnapshot();
   BG.scheduleCheck();
   (b || $.noop)()
@@ -156,7 +208,7 @@ executeSql("REPLACE INTO pages(url, name, mode, regex, selector,                
 }
 
 function removePage(a, b) {
-executeSql("DELETE FROM pages WHERE url = ?", [a], null, function() {
+executeSql("DELETE FROM pages WHERE url = ?", [a], function() {
   BG.scheduleCheck();
   (b || $.noop)()
 })
@@ -164,7 +216,7 @@ executeSql("DELETE FROM pages WHERE url = ?", [a], null, function() {
 
 function isPageMonitored(a, b) {
 executeSql("SELECT COUNT(*) FROM pages WHERE url = ?", [a], function(a) {
-  a = a.rows.item(0)["COUNT(*)"];
+  a = a[0]["COUNT(*)"];
   console.assert(1 >= a);
   (b || $.noop)(1 == a)
 })
