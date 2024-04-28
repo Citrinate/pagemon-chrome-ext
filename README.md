@@ -20,9 +20,8 @@ Features:
 - Desktop notifications.
 - Import and export the monitored pages list.
 
-## Building
-Run the following command from the root folder to build the app
-`python ./src/build.py`
+## How to install
 
-You also need to pip install these: `pip install --no-binary lxml lxml cssselect`
-
+1. [Download](https://github.com/Citrinate/pagemon-chrome-ext/archive/refs/heads/master.zip) and extract the source code for this project
+2. Navigate to `chrome://extensions/` and enable "Developer mode"
+3. Drag and drop the "src" folder from the zip file onto the "Extensions" page
