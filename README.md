@@ -24,4 +24,4 @@ Features:
 
 1. [Download](https://github.com/Citrinate/pagemon-chrome-ext/archive/refs/heads/master.zip) and extract the source code for this project
 2. Navigate to `chrome://extensions/` and enable "Developer mode"
-3. Drag and drop the "src" folder from the zip file onto the "Extensions" page
+3. Click on "Load unpacked" and select the "src" folder from the extracted zip file
