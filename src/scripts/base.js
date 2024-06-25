@@ -12,7 +12,7 @@ var SETTINGS = {
   hide_deletions: "hide_deletions",
   show_full_page_diff: "show_full_page_diff"
 },
-BG = chrome.extension.getBackgroundPage(),
+BG = false,
 REGEX_TIMEOUT = 7E3,
 REGEX_WORKER_PATH = "scripts/regex.js",
 REQUEST_TIMEOUT = 1E4,
@@ -99,26 +99,26 @@ for (var b = [], d = 0; d < a.length; d++) {
 return b.join("")
 }
 
-function describeTime(a) {
+async function describeTime(a) {
 var b = Math.floor(a / 1E3),
   d = Math.floor(b / 60) % 60,
   c = Math.floor(b / 3600) % 24,
   e = Math.floor(b / 86400),
   f = "";
 if (e) {
-  var g = chrome.i18n.getMessage("day");
-  a = chrome.i18n.getMessage("days", e.toString());
+  var g = await i18nGetMessage("day");
+  a = await i18nGetMessage("days", e.toString());
   f += 1 == e ? g : a
 }
-c && (g = chrome.i18n.getMessage("hour"), a = chrome.i18n.getMessage("hours", c.toString()), f += " " + (1 == c ? g : a));
-!e && d && (g = chrome.i18n.getMessage("minute"), a = chrome.i18n.getMessage("minutes", d.toString()), f += " " + (1 == d ? g : a));
-f || (g = chrome.i18n.getMessage("second"), a = chrome.i18n.getMessage("seconds",
+c && (g = await i18nGetMessage("hour"), a = await i18nGetMessage("hours", c.toString()), f += " " + (1 == c ? g : a));
+!e && d && (g = await i18nGetMessage("minute"), a = await i18nGetMessage("minutes", d.toString()), f += " " + (1 == d ? g : a));
+f || (g = await i18nGetMessage("second"), a = await i18nGetMessage("seconds",
   b.toString()), f += " " + (1 == b ? g : a));
 return f.replace(/^\s+|\s+$/g, "")
 }
 
-function describeTimeSince(a) {
-return chrome.i18n.getMessage("ago", describeTime(Date.now() - a))
+async function describeTimeSince(a) {
+return await i18nGetMessage("ago", await describeTime(Date.now() - a))
 }
 
 function getStrippedBody(a) {
@@ -128,12 +128,12 @@ return b.replace(/<script\b[^>]*(?:>[^]*?<\/script>|\/>)/ig, "<blink/>")
 }
 
 function getFavicon(a) {
-return "chrome://favicon/" + a
+return chrome.runtime.getURL("/_favicon/?pageUrl=") + a;
 }
 
 function applyLocalization() {
-$(".i18n[title]").each(function() {
-  $(this).removeClass("i18n").text(chrome.i18n.getMessage($(this).attr("title"))).attr("title", "")
+$(".i18n[title]").each(async function() {
+  $(this).removeClass("i18n").text(await i18nGetMessage($(this).attr("title"))).attr("title", "")
 })
 }
 
@@ -196,20 +196,20 @@ e.push(a);
 c ? (a = "UPDATE pages SET " + c.join(", ") + " WHERE url = ?", executeSql(a, e, d)) : (d || $.noop)()
 }
 
-function addPage(a, b) {
-if (window != BG) return BG.addPage(a, b);
+async function addPage(a, b) {
+if (!BG) return bgAddPage(a, b);
 executeSql("REPLACE INTO pages(url, name, mode, regex, selector,                    check_interval, html, crc, updated,                    last_check, last_changed) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-[a.url, a.name || chrome.i18n.getMessage("untitled", a.url), a.mode || "text", a.regex || null, a.selector || null, a.check_interval || null, a.html || "", a.crc || 0, a.updated ? 1 : 0, Date.now(), a.last_changed || null]
+[a.url, a.name || await i18nGetMessage("untitled", a.url), a.mode || "text", a.regex || null, a.selector || null, a.check_interval || null, a.html || "", a.crc || 0, a.updated ? 1 : 0, Date.now(), a.last_changed || null]
 , function() {
-  BG.takeSnapshot();
-  BG.scheduleCheck();
+  bgTakeSnapshot();
+  bgScheduleCheck();
   (b || $.noop)()
 })
 }
 
 function removePage(a, b) {
 executeSql("DELETE FROM pages WHERE url = ?", [a], function() {
-  BG.scheduleCheck();
+  bgScheduleCheck();
   (b || $.noop)()
 })
 }
@@ -327,3 +327,206 @@ headers: {
   Etag: "bad-etag"
 }
 });
+
+async function i18nGetMessage(...params) {
+  if (chrome.i18n && chrome.i18n.getMessage) {
+    return chrome.i18n.getMessage(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "i18n.getMessage", params: params});
+  }
+}
+
+async function extensionGetViews(...params) {
+  if (chrome.extension && chrome.extension.getViews) {
+    return chrome.extension.getViews(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "extension.getViews", params: params});
+  }
+}
+
+async function notificationsCreate(...params) {
+  if (chrome.notifications && chrome.notifications.create) {
+    return chrome.notifications.create(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "notifications.create", params: params});
+  }
+}
+
+async function notificationsClear(...params) {
+  if (chrome.notifications && chrome.notifications.clear) {
+    return chrome.notifications.clear(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "notifications.clear", params: params});
+  }
+}
+
+async function actionSetBadgeBackgroundColor(...params) {
+  if (chrome.action && chrome.action.setBadgeBackgroundColor) {
+    return chrome.action.setBadgeBackgroundColor(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "action.setBadgeBackgroundColor", params: params});
+  }
+}
+
+async function actionSetBadgeText(...params) {
+  if (chrome.action && chrome.action.setBadgeText) {
+    return chrome.action.setBadgeText(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "action.setBadgeText", params: params});
+  }
+}
+
+async function actionSetIcon(...params) {
+  if (chrome.action && chrome.action.setIcon) {
+    return chrome.action.setIcon(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "action.setIcon", params: params});
+  }
+}
+
+chrome.runtime.onMessage.addListener(
+  function(request, sender, sendResponse) {
+      // console.log("message recieved at base.js", request);
+
+      if (!BG) {
+        return;
+      }
+
+      switch (request.type) {
+          case "bgAddPage":
+            sendResponse(bgAddPage(...request.params));
+            break;
+
+          case "bgRemovePage":
+            sendResponse(bgRemovePage(...request.params));
+            break;
+
+          case "bgTakeSnapshot":
+            sendResponse(bgTakeSnapshot(...request.params));
+            break;
+
+          case "bgScheduleCheck":
+            sendResponse(bgScheduleCheck(...request.params));
+            break;
+
+          case "bgSetPageSettings":
+            sendResponse(bgSetPageSettings(...request.params));
+            break;
+
+          case "bgUpdateBadge":
+            sendResponse(bgUpdateBadge(...request.params));
+            break;
+
+          case "bgGetAllUpdatedPages":
+            sendResponse(bgGetAllUpdatedPages(...request.params));
+            break;
+
+          case "bgCheck":
+            sendResponse(bgCheck(...request.params));
+            break;
+
+          case "bgCheckPage":
+            sendResponse(bgCheckPage(...request.params));
+            break;
+
+          case "bgHideDesktopNotification":
+            sendResponse(bgHideDesktopNotification(...request.params));
+            break;
+
+          case "bgNotificationClicked":
+            sendResponse(bgNotificationClicked(...request.params));
+            break;
+
+          default:
+            break;
+      }
+  }
+);
+
+async function bgAddPage(...params) {
+    if (BG) {
+      return addPage(...params);
+    } else {
+      return await chrome.runtime.sendMessage({type: "bgAddPage", params: params});
+    }
+}
+
+async function bgRemovePage(...params) {
+  if (BG) {
+    return removePage(...params); 
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgRemovePage", params: params});
+  }
+}
+
+async function bgTakeSnapshot(...params) {
+  if (BG) {
+    return takeSnapshot(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgTakeSnapshot", params: params});
+  }
+}
+
+async function bgScheduleCheck(...params) {
+  if (BG) {
+    return scheduleCheck(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgScheduleCheck", params: params});
+  }
+}
+
+async function bgSetPageSettings(...params) {
+  if (BG) {
+    return setPageSettings(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgSetPageSettings", params: params});
+  }
+}
+
+async function bgUpdateBadge(...params) {
+  if (BG) {
+    return updateBadge(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgUpdateBadge", params: params});
+  }
+}
+
+async function bgGetAllUpdatedPages(...params) {
+  if (BG) {
+    return getAllUpdatedPages(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgGetAllUpdatedPages", params: params});
+  }
+}
+
+async function bgCheck(...params) {
+  if (BG) {
+    return check(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgCheck", params: params});
+  }
+}
+
+async function bgCheckPage(...params) {
+  if (BG) {
+    return checkPage(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgCheckPage", params: params});
+  }
+}
+
+async function bgHideDesktopNotification(...params) {
+  if (BG) {
+    return hideDesktopNotification(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgHideDesktopNotification", params: params});
+  }
+}
+
+async function bgNotificationClicked(...params) {
+  if (BG) {
+    return notificationClicked(...params);
+  } else {
+    return await chrome.runtime.sendMessage({type: "bgNotificationClicked", params: params});
+  }
+}

@@ -1,9 +1,10 @@
+BG = true;
 var RELIABLE_CHECKPOINT = "http://www.google.com/",
     RELIABLE_CHECKPOINT_REGEX = /Google/,
     DEFAULT_CHECK_INTERVAL = 108E5,
     RESCHEDULE_DELAY = 9E5,
     MINIMUM_CHECK_SPACING = 1E3,
-    BROWSER_ICON = "img/browser_action_19.png",
+    BROWSER_ICON = chrome.runtime.getURL("img/browser_action_19.png"),
     EPSILON = 500,
     WATCHDOG_INTERVAL = 9E5,
     WATCHDOG_TOLERANCE = 12E4;
@@ -22,62 +23,26 @@ var RELIABLE_CHECKPOINT = "http://www.google.com/",
         }
     };
     triggerDesktopNotification = function() {
-        if (getSetting(SETTINGS.notifications_enabled) && !(0 < chrome.extension.getViews({
-                type: "popup"
-            }).length)) {
+        if (getSetting(SETTINGS.notifications_enabled)) {
             var b = getSetting(SETTINGS.notifications_timeout) || 3E4;
-            if (window.webkitNotifications && webkitNotifications.createHTMLNotification) a = window.webkitNotifications.createHTMLNotification("notification.htm"),
-                a.show();
-            else if (chrome.notifications && chrome.notifications.create) getAllUpdatedPages(function(b) {
-                if (0 != b.length) {
-                    title = 1 == b.length ? chrome.i18n.getMessage("page_updated_single") : chrome.i18n.getMessage("page_updated_multi", b.length.toString());
-                    var c = $.map(b, function(b) {
-                        return {
-                            title: b.name
-                        }
-                    });
-                    c = {
-                        type: "basic",
-                        iconUrl: chrome.extension.getURL("img/icon_128.png"),
-                        title: title,
-                        message: "",
-                        buttons: c
-                    };
-                    e = b;
-                    null != a && hideDesktopNotification();
-                    chrome.notifications.create("", c, function(b) {
-                        a = b
-                    })
-                }
-            }), d || (chrome.notifications.onButtonClicked.addListener(function(b,
-                a) {
-                var c = e[a];
-                window.open(c.url);
-                BG.setPageSettings(c.url, {
-                    updated: !1
-                }, function() {
-                    updateBadge();
-                    takeSnapshot(c.url, scheduleCheck);
-                    triggerDesktopNotification()
-                })
-            }), d = !0);
-            else return;
-            6E4 >= b && setTimeout(hideDesktopNotification, b)
+            getAllUpdatedPages(function(c) {
+                notificationsCreate(c, b);
+            });
         }
     };
-    hideDesktopNotification = function() {
-        null != a && ("string" == typeof a ? chrome.notifications.clear(a, $.noop) : a.cancel(), a = null)
+    hideDesktopNotification = async function() {
+        await notificationsClear()
     };
     updateBadge = function() {
-        getAllUpdatedPages(function(a) {
+        getAllUpdatedPages(async function(a) {
             a = a.length;
-            chrome.browserAction.setBadgeBackgroundColor({
+            await actionSetBadgeBackgroundColor({
                 color: getSetting(SETTINGS.badge_color) || [0, 180, 0, 255]
             });
-            chrome.browserAction.setBadgeText({
+            await actionSetBadgeText({
                 text: a ? String(a) : ""
             });
-            chrome.browserAction.setIcon({
+            await actionSetIcon({
                 path: BROWSER_ICON
             });
             if (a > b) try {
@@ -155,8 +120,8 @@ var RELIABLE_CHECKPOINT = "http://www.google.com/",
     }
 })();
 
-function insertPages(b, a) {
-    for (var d = b.length, e = 0; e < b.length; e++) addPage(b[e], function() {
+async function insertPages(b, a) {
+    for (var d = b.length, e = 0; e < b.length; e++) await addPage(b[e], function() {
         0 == --d && (a || $.noop)()
     })
 }
@@ -201,20 +166,20 @@ function removeUnusedSettings(b) {
     for (var a in b) void 0 === SETTINGS[a] && delete b[a]
 }
 
-function fixSoundAlerts() {
+async function fixSoundAlerts() {
     var b = getSetting(SETTINGS.custom_sounds) || [];
     b.unshift({
-        name: chrome.i18n.getMessage("sound_cuckoo"),
-        url: chrome.extension.getURL("audio/cuckoo.ogg")
+        name: await i18nGetMessage("sound_cuckoo"),
+        url: chrome.runtime.getURL("audio/cuckoo.ogg")
     });
     b.unshift({
-        name: chrome.i18n.getMessage("sound_chime"),
-        url: chrome.extension.getURL("audio/bell.ogg")
+        name: await i18nGetMessage("sound_chime"),
+        url: chrome.runtime.getURL("audio/bell.ogg")
     });
     setSetting(SETTINGS.custom_sounds, b);
     b = /^http:\/\/work\.max99x\.com\/(bell.ogg|cuckoo.ogg)$/;
     var a = getSetting(SETTINGS.sound_alert);
-    b.test(a) && (b = "audio/" + a.match(b)[1], setSetting(SETTINGS.sound_alert, chrome.extension.getURL(b)))
+    b.test(a) && (b = "audio/" + a.match(b)[1], setSetting(SETTINGS.sound_alert, chrome.runtime.getURL(b)))
 }
 
 function bringUpToDate(b, a) {
@@ -229,3 +194,14 @@ function bringUpToDate(b, a) {
             "date added"), setSetting(SETTINGS.view_all_action, "original"), d()) : 2 > b ? (setSetting(SETTINGS.view_all_action, "original"), delSetting("last_check"), importVersionOnePages(d)) : 3 > b ? (setSetting(SETTINGS.check_interval, getSetting("timeout") || DEFAULT_CHECK_INTERVAL), setSetting(SETTINGS.view_all_action, "original"), delSetting("timeout"), importVersionTwoPages(d)) : d()
     })
 };
+
+function notificationClicked(url) {
+    window.open(url);
+    setPageSettings(url, {
+        updated: !1
+    }, function() {
+        updateBadge();
+        takeSnapshot(url, scheduleCheck);
+        triggerDesktopNotification()
+    })
+}

@@ -61,7 +61,7 @@ function setPageCheckInterval(a, b) {
     var c = 6E4 * parseFloat(b) || null;
     setPageSettings(a, {
         check_interval: c
-    }, BG.scheduleCheck)
+    }, bgScheduleCheck)
 }
 
 function setPageRegexOrSelector(a, b, c) {
@@ -104,14 +104,14 @@ function exportPagesList(a) {
     })
 }
 
-function importPagesList(a) {
+async function importPagesList(a) {
     for (var b = RegExp("(<[aA][^<>]+>[^<>]+</[aA]>)(?:\\s*\x3c!--PageMonitorAdvancedPageData=({.*?})--\x3e)?", "g"), c, e = 0; c = b.exec(a, b.lastIndex);) {
         var d = $(c[1]),
             f = d.attr("HREF") || "";
         d = d.text() || chrome.i18n.getMessage("untitled", f);
         var g = {};
         c[2] && (g = JSON.parse(c[2].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")));
-        f && (addPage($.extend({
+        f && (await addPage($.extend({
             url: f,
             name: d
         }, g)), e++)
@@ -147,7 +147,7 @@ function initializeColorPicker() {
     $("#badge_color input").val(b).change(function() {
         var a = $(this).val();
         setSetting(SETTINGS.badge_color, [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16), 255]);
-        BG.updateBadge()
+        bgUpdateBadge()
     }).colorPicker()
 }
 
@@ -184,9 +184,9 @@ function initializeIntervalSliders() {
         setSetting(SETTINGS.check_interval,
             a)
     }).change();
-    b.val(timeAbsoluteToLog(a)).change(function() {
+    b.val(timeAbsoluteToLog(a)).change(async function() {
         var a = 6E4 * timeLogToAbsolute(parseFloat($(this).val()));
-        b.siblings(".range_value_label").text(describeTime(a))
+        b.siblings(".range_value_label").text(await describeTime(a))
     }).mouseup(function() {
         var a = timeLogToAbsolute(parseFloat($(this).val())),
             b = 6E4 * a;
@@ -215,9 +215,9 @@ function initializeNotificationsToggler() {
 
 function initializeNotificationsTimeout() {
     var a = getSetting(SETTINGS.notifications_timeout) / 1E3 || 30;
-    $("#notifications_timeout input").val(a).change(function() {
+    $("#notifications_timeout input").val(a).change(async function() {
         var a = 1E3 * parseFloat($(this).val());
-        a = 6E4 < a ? chrome.i18n.getMessage("until_closed") : describeTime(a);
+        a = 6E4 < a ? chrome.i18n.getMessage("until_closed") : await describeTime(a);
         $(this).siblings(".range_value_label").text(a)
     }).mouseup(function() {
         var a = 1E3 * parseFloat($(this).val());
@@ -371,11 +371,12 @@ function initializeImporter() {
         a.fadeOut();
         shadeBackground(!1)
     });
-    $("#import_perform", a).click(function() {
+    $("#import_perform", a).click(async function() {
         var b = 0;
         try {
-            b = importPagesList($("textarea", a).val())
+            b = await importPagesList($("textarea", a).val())
         } catch (c) {
+            console.log(c);
             alert(chrome.i18n.getMessage("import_error"));
             a.fadeOut();
             shadeBackground(!1);
@@ -393,9 +394,8 @@ function initializeGlobalChecker() {
         getAllPageURLs(function(a) {
             a = chrome.i18n.getMessage("check_in_progress") + "..";
             $(".last_check_time").text(a);
-            BG.check(!0, $.noop, function(a) {
-                a = findPageRecord(a);
-                $(".last_check_time", a).trigger("time_updated")
+            bgCheck(!0).then(function() {
+                $(".last_check_time").trigger("time_updated")
             })
         })
     })
@@ -461,7 +461,7 @@ function initializePageRename() {
 function initializePageRemove() {
     $(".stop_monitoring").live("click", function() {
         var a = findUrl(this);
-        removePage(a, BG.updateBadge);
+        removePage(a, bgUpdateBadge);
         var b = scrollY;
         $("td", findPageRecord(this)).slideUp("slow", function() {
             1 == $("#pages .page_record").length ? $("#pages").animate({
@@ -478,9 +478,9 @@ function initializePageCheck() {
             b = findUrl(this),
             c = chrome.i18n.getMessage("check_in_progress") + "..";
         a.text(c);
-        BG.checkPage(b, function(b) {
+        bgCheckPage(b).then(function() {
             a.trigger("time_updated");
-            BG.updateBadge()
+            bgUpdateBadge()
         })
     })
 }
@@ -522,9 +522,9 @@ function initializePageCheckInterval() {
             setPageCheckInterval(a, b)
         } else setPageCheckInterval(a, null)
     });
-    $(".page_interval input[type=range]").live("change", function() {
+    $(".page_interval input[type=range]").live("change", async function() {
         var a = 6E4 * timeLogToAbsolute(parseFloat($(this).val()));
-        $(this).siblings(".range_value_label").text(describeTime(a))
+        $(this).siblings(".range_value_label").text(await describeTime(a))
     }).live("mouseup", function() {
         var a =
             timeLogToAbsolute(parseFloat($(this).val()));
@@ -608,20 +608,33 @@ function initializePageModePicker() {
             url: findUrl(this),
             selected: !0
         }, function(a) {
-            chrome.tabs.executeScript(a.id, {
-                file: "lib/jquery-1.7.1.js"
-            }, function() {
-                chrome.tabs.executeScript(a.id, {
-                    file: "scripts/selector.js"
-                }, function() {
-                    chrome.tabs.executeScript(a.id, {
-                        code: "$(initialize);"
+            chrome.scripting.executeScript({
+                    files: ["lib/jquery-1.7.1.js"],
+                    target: {
+                        tabId: a.id
+                    },
+                }, function () {
+                    chrome.scripting.executeScript({
+                        files: ["scripts/selector.js"],
+                        target: {
+                            tabId: a.id
+                        },
+                    }).then(() => {
+                        chrome.scripting.executeScript({
+                            func: () => initialize(),
+                            target: {
+                                tabId: a.id
+                            },
+                        });
+                        chrome.scripting.insertCSS({
+                            files: ["styles/selector.css"],
+                            target: {
+                                tabId: a.id
+                            }
+                        });
                     })
-                });
-                chrome.tabs.insertCSS(a.id, {
-                    file: "styles/selector.css"
-                })
-            })
+                }
+            );
         })
     })
 }
@@ -669,8 +682,8 @@ function addPageToTable(a) {
     var f = b.find(".last_check_time");
     f.bind("time_updated", function() {
         var b = $(this);
-        getPage(a.url, function(a) {
-            var c = a.last_check ? describeTimeSince(a.last_check) :
+        getPage(a.url, async function(a) {
+            var c = a.last_check ? await describeTimeSince(a.last_check) :
                 chrome.i18n.getMessage("never");
             c != b.text() && b.fadeOut("slow", function() {
                 b.text(c).fadeIn("slow")
@@ -718,7 +731,7 @@ function init() {
     $(".mode_pick").val(chrome.i18n.getMessage("pick_button"));
     initializeGlobalControls();
     initializePageControls();
-    chrome.extension.onRequest.addListener(selectorServer);
+    chrome.runtime.onMessage.addListener(selectorServer);
     fillPagesList(function() {
         var a = atob(window.location.hash.substring(1));
         if (a) {

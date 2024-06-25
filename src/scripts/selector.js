@@ -69,7 +69,7 @@ function setUpButtonHandlers() {
         }
     });
     done_button.click(function() {
-        current_selector ? chrome.extension.sendRequest({
+        current_selector ? chrome.runtime.sendMessage({
                 selector: current_selector,
                 url: window.location.href
             },
