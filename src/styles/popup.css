@@ -30,6 +30,10 @@ hr {
 	margin: 0 10px;
 }
 
+.page_controls {
+	text-align: right;
+}
+
 .page_controls>span {
 	color: #849ccb;
 	margin-left: 3.15em;
