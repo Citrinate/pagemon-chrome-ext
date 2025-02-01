@@ -1,4 +1,4 @@
-# pagemon-chrome-ext
+# Page Monitor Chrome Extension (Manifest V3 Compatible)
 
 **NOTE:** The project is currently in maintenance mode. No new features are planned.
 
