@@ -1,3 +1,5 @@
+chrome.runtime.onStartup.addListener(() => {});
+
 let creating; // A global promise to avoid concurrency issues
 async function setupOffscreenDocument(path) {
   // Check all windows controlled by the service worker to see if one
